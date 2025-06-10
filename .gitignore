@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+.DS_Store
+*.log
+snapshots/
+quarantine/
+*.pyc
+watchdog_timeline.log
+mdm_state.json 
