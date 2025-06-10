@@ -1,6 +1,6 @@
 # macWatchdog
 
-macWatchdog is a privacy-focused, user-friendly tool for auditing and managing MDM enrollment, remote access, enterprise management hooks, and other security and privacy risks on macOS. Whether you're a general user or an IT professional, macWatchdog helps you understand and control your Mac's security.
+macWatchdog is a privacy-focused, user-friendly tool for auditing and managing security and privacy settings on macOS—including MDM enrollment, remote access, enterprise management, and potential risks. It helps you understand what's active on your Mac, whether for personal peace of mind or enterprise compliance.
 
 [MIT License](./LICENSE) | Python 3.8+ | macOS
 
@@ -42,7 +42,7 @@ macWatchdog never sends data off your device and is designed to be privacy-first
 2. **Run the install script:**
 
    ```sh
-   cd CLI
+   cd macwatchdog-<version>
    bash install.sh
    ```
 
@@ -70,7 +70,7 @@ macWatchdog never sends data off your device and is designed to be privacy-first
 To fully remove macWatchdog, its data, and the shell alias:
 
 ```sh
-cd CLI
+cd macwatchdog-<version>
 bash uninstall.sh
 ```
 
@@ -136,7 +136,7 @@ This project is open source and available under the [MIT License](./LICENSE).
 ## Screenshots
 
 ### Initial View
-![macWatchdog CLI initial view](../screenshots/macwatchdog-cli.png)
+![macWatchdog CLI initial view](screenshots/macwatchdog-cli.png)
 
 ### Select Checks Menu
-![Select checks to run menu](../screenshots/select-checks.png) 
+![Select checks to run menu](screenshots/select-checks.png) 
