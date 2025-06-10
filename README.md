@@ -1,6 +1,7 @@
 # macWatchdog
 
-macWatchdog is a privacy-focused, user-friendly tool for auditing and managing security and privacy settings on macOS—including MDM enrollment, remote access, enterprise management, and potential risks. It helps you understand what's active on your Mac, whether for personal peace of mind or enterprise compliance.
+Privacy-focused macOS CLI tool to audit and manage security, privacy, MDM enrollment, remote access, and configuration profiles.
+Gain visibility and control over what's active on your Mac—whether you're a general user, power user, or IT professional.
 
 [MIT License](./LICENSE) | Python 3.8+ | macOS
 
