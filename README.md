@@ -31,7 +31,7 @@ macWatchdog never sends data off your device and is designed to be privacy-first
 - Audit MDM enrollment, remote access, launch agents/daemons, configuration profiles, USB devices, network interfaces, and more
 - Quarantine, restore, or purge unsigned launch agents/daemons
 - Detect world-writable/suspicious files, unknown admin users, login items, open network listeners, and apps with Accessibility/Full Disk Access
-- Profile/MDM Deep Dive & Management: List, flag, and remove configuration profiles; alert on MDM changes; restore instructions for profiles
+- Profile/MDM Deep Dive: List, flag, and remove user-removable configuration profiles; alert on MDM changes; restore instructions for profiles
 - Forensics & Reporting: Export system snapshots, compare snapshots, view a timeline/log of changes, and clear logs/snapshots
 - Housekeeping: Easily clear logs, snapshots, and quarantine items from the menu
 - Export reports to text or JSON
