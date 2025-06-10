@@ -7,3 +7,4 @@ quarantine/
 *.pyc
 watchdog_timeline.log
 mdm_state.json 
+*.zip
