@@ -29,7 +29,9 @@ macWatchdog never sends data off your device and is designed to be privacy-first
 
 ## Features
 - Audit MDM enrollment, remote access, launch agents/daemons, configuration profiles, USB devices, network interfaces, and more
-- Quarantine, restore, or purge unsigned launch agents/daemons
+- Unsigned Launch Agents/Daemons Management: Detect, quarantine, restore, or purge unsigned launch agents/daemons with automatic backup creation
+- Login Items Management: View, backup, remove, and restore login items with automatic backup creation
+- Port Management: Monitor open ports, create backups of port state, and safely close ports with automatic backup creation
 - Detect world-writable/suspicious files, unknown admin users, login items, open network listeners, and apps with Accessibility/Full Disk Access
 - Profile/MDM Deep Dive: List, flag, and remove user-removable configuration profiles; alert on MDM changes; restore instructions for profiles
 - Forensics & Reporting: Export system snapshots, compare snapshots, view a timeline/log of changes, and clear logs/snapshots
@@ -88,7 +90,7 @@ Run the interactive menu (after install):
 macwatchdog
 ```
 
-You will see a menu with options to run all checks, select specific checks, manage unsigned launch agents/daemons, manage profiles/MDM, use forensics/reporting tools, export reports, view help/about, and view the README.
+You will see a menu with options to run all checks, select specific checks, manage unsigned launch agents/daemons, manage login items, manage open ports, search for items, manage profiles/MDM, use forensics/reporting tools, export reports, view help/about, and view the README.
 
 ### Command-Line Options
 
@@ -106,15 +108,55 @@ macwatchdog check --checks 1,3,5
 
 Export the last report from the menu to a text or JSON file.
 
-### Quarantine/Restore/Purge Unsigned Launch Agents/Daemons
+### Unsigned Launch Agents/Daemons Management
 
-Use the menu option to manage unsigned launch agents/daemons. Quarantined files are moved to the `CLI/quarantine` folder and can be restored or purged if needed.
+The unsigned launch agents/daemons management feature allows you to:
+- View all unsigned launch agents and daemons currently on your system
+- Quarantine selected or all unsigned agents/daemons (creates automatic backups)
+- View quarantined agents/daemons with their backup timestamps
+- Restore quarantined agents/daemons to their original locations
+- Purge all quarantined items when no longer needed
+
+This feature helps identify and manage potentially suspicious or unwanted launch agents and daemons that aren't properly signed.
+
+### Login Items Management
+
+The login items management feature allows you to:
+- View all current login items with their details (name, path, type)
+- Create backups of login items before making changes
+- Remove login items with automatic backup creation
+- Restore login items from backups
+- Delete old backups when no longer needed
+
+### Port Management
+
+The port management feature allows you to:
+- View all currently open ports and their associated processes
+- Create backups of the current port state (useful for auditing and documentation)
+- Safely close ports with automatic backup creation
+- View backup details and manage backup files
+
+Note: While the tool can create backups of port state, it does not attempt to restore processes as this would require specific process arguments and configurations that vary by application.
+
+### Search Functionality
+
+The search feature allows you to:
+- Search for agents, profiles, login items, or files by keyword
+- View detailed information about found items
+- Take actions on found items (disable/quarantine, restore)
+- Search across multiple locations including:
+  - Launch agents/daemons
+  - Configuration profiles
+  - Login items
+  - Quarantined items
 
 ## Maintenance & Housekeeping
 
 - **Clear Timeline/Log:** Use the Forensics & Reporting menu to clear the forensic timeline/log.
 - **Clear Snapshots:** Use the Forensics & Reporting menu to delete all saved snapshots.
 - **Purge Quarantine:** Use the Manage Unsigned Launch Agents/Daemons menu to permanently delete all quarantined items.
+- **Delete Backups:** Use the respective management menus to delete old backups of login items and port states.
+- **Uninstall:** Use the uninstall command to completely remove macWatchdog and all its data.
 
 ## Help / About
 

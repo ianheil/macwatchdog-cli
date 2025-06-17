@@ -15,8 +15,8 @@ from audit.usb import check_usb
 from audit.network import check_network
 from audit.permissions import check_world_writable
 from audit.users import check_admin_users
-from audit.login_items import check_login_items
-from audit.network_listeners import check_network_listeners
+from audit.login_items import check_login_items, remove_login_item, get_login_items, restore_login_item, get_quarantine_dir
+from audit.network_listeners import check_network_listeners, backup_port_state, close_port_process, restore_port_state
 from audit.accessibility import check_accessibility_apps
 from audit.tcc import check_tcc_permissions
 from audit.hardening import (
@@ -29,6 +29,7 @@ from pathlib import Path
 import stat
 import subprocess
 import json
+from datetime import datetime
 
 # Read version from VERSION file
 VERSION = "unknown"
@@ -79,11 +80,8 @@ MANUAL_HARDENING_TIPS = [
 
 # Quarantine folder (could be renamed to 'dog_house' for fun, but using 'quarantine' for clarity)
 QUARANTINE_DIR = Path(__file__).parent / "quarantine"
-
-# Persistent storage for MDM state
-MDM_STATE_FILE = Path(__file__).parent / "mdm_state.json"
-SNAPSHOT_DIR = Path(__file__).parent / "snapshots"
-LOG_FILE = Path(__file__).parent / "watchdog_timeline.log"
+SNAPSHOT_DIR = QUARANTINE_DIR / "snapshots"
+LOG_FILE = QUARANTINE_DIR / "watchdog_timeline.log"
 
 def run_all_checks():
     report = {}
@@ -382,13 +380,15 @@ def menu():
         console.print("[bold cyan]1.[/bold cyan] Run all checks")
         console.print("[bold cyan]2.[/bold cyan] Select checks to run")
         console.print("[bold cyan]3.[/bold cyan] Manage unsigned launch agents/daemons")
-        console.print("[bold cyan]4.[/bold cyan] Search agents/profiles/login items")
-        console.print("[bold cyan]5.[/bold cyan] Profile/MDM Management")
-        console.print("[bold cyan]6.[/bold cyan] Forensics/Reporting")
-        console.print("[bold cyan]7.[/bold cyan] Help/About")
-        console.print("[bold cyan]8.[/bold cyan] View README")
-        console.print("[bold cyan]9.[/bold cyan] Export last report")
-        console.print("[bold cyan]10.[/bold cyan] Quit")
+        console.print("[bold cyan]4.[/bold cyan] Manage login items")
+        console.print("[bold cyan]5.[/bold cyan] Manage open ports")
+        console.print("[bold cyan]6.[/bold cyan] Search agents/profiles/login items")
+        console.print("[bold cyan]7.[/bold cyan] Profile/MDM Management")
+        console.print("[bold cyan]8.[/bold cyan] Forensics/Reporting")
+        console.print("[bold cyan]9.[/bold cyan] Help/About")
+        console.print("[bold cyan]10.[/bold cyan] View README")
+        console.print("[bold cyan]11.[/bold cyan] Export last report")
+        console.print("[bold cyan]12.[/bold cyan] Quit")
         action = Prompt.ask("Selection", default="1")
         if action == "1":
             if os.geteuid() != 0:
@@ -409,23 +409,34 @@ def menu():
             manage_unsigned()
             input("\nPress Enter to return to the menu...")
         elif action == "4":
-            search_items()
+            manage_login_items()
             input("\nPress Enter to return to the menu...")
         elif action == "5":
-            profile_mdm_menu()
+            manage_ports()
+            input("\nPress Enter to return to the menu...")
         elif action == "6":
-            forensics_menu()
+            search_items()
+            input("\nPress Enter to return to the menu...")
         elif action == "7":
+            profile_mdm_menu()
+        elif action == "8":
+            forensics_menu()
+        elif action == "9":
             console.print(Panel("[bold magenta]macWatchdog Help/About[/bold magenta]\n\n"
                 "- Audit MDM enrollment, remote access, launch agents/daemons, configuration profiles, USB devices, network interfaces, and more\n"
-                "- Quarantine and restore unsigned launch agents/daemons\n"
+                "- Unsigned Launch Agents/Daemons Management: Detect, quarantine, restore, or purge unsigned launch agents/daemons with automatic backup creation\n"
+                "- Login Items Management: View, backup, remove, and restore login items with automatic backup creation\n"
+                "- Port Management: Monitor open ports, create backups of port state, and safely close ports with automatic backup creation\n"
+                "- Search Functionality: Find agents, profiles, login items, or files by keyword across multiple locations\n"
                 "- Detect world-writable/suspicious files, unknown admin users, login items, open network listeners, and apps with Accessibility/Full Disk Access\n"
+                "- Profile/MDM Deep Dive: List, flag, and remove user-removable configuration profiles; alert on MDM changes\n"
+                "- Forensics & Reporting: Export system snapshots, compare snapshots, view a timeline/log of changes\n"
                 "- Export reports to text or JSON\n"
                 "- Modular, open source, and privacy-first\n\n"
                 "[yellow]Note: Some checks may trigger macOS privacy popups (TCC) for full access. See the README for details.[/yellow]"
             ))
             input("\nPress Enter to return to the menu...")
-        elif action == "8":
+        elif action == "10":
             try:
                 readme_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "README.md")
                 with open(readme_path, "r") as f:
@@ -434,7 +445,7 @@ def menu():
             except Exception as e:
                 console.print(f"[red]Could not open README.md: {e}[/red]")
             input("\nPress Enter to return to the menu...")
-        elif action == "9":
+        elif action == "11":
             if not last_report:
                 console.print("[yellow]No report to export. Run a check first.[/yellow]")
                 input("\nPress Enter to return to the menu...")
@@ -444,7 +455,7 @@ def menu():
             export_report(last_report, filename, as_json=as_json)
             console.print(f"\n[green]Report exported to {filename}[/green]")
             input("\nPress Enter to return to the menu...")
-        elif action == "10":
+        elif action == "12":
             console.print("[bold magenta]Bark! Bark! Bark![/bold magenta]")
             break
         else:
@@ -475,6 +486,7 @@ def check(
 
 @app.command()
 def manage_unsigned():
+    """Manage unsigned launch agents/daemons."""
     print_logo()
     if os.geteuid() != 0:
         console.print("[yellow]Warning: This feature requires administrator (sudo) privileges![/yellow]")
@@ -482,8 +494,9 @@ def manage_unsigned():
     while True:
         agents = find_unsigned_agents()
         quarantined = []
-        if QUARANTINE_DIR.exists():
-            for backup_dir in sorted(QUARANTINE_DIR.iterdir(), reverse=True):
+        agents_dir = QUARANTINE_DIR / "agents"
+        if agents_dir.exists():
+            for backup_dir in sorted(agents_dir.iterdir(), reverse=True):
                 if backup_dir.is_dir():
                     for f in backup_dir.iterdir():
                         quarantined.append(str(f))
@@ -545,8 +558,8 @@ def manage_unsigned():
         elif action == "3":
             confirm = Prompt.ask("Are you sure you want to purge all quarantined items? (y/n)", default="n")
             if confirm.lower() == "y":
-                if QUARANTINE_DIR.exists():
-                    for backup_dir in QUARANTINE_DIR.iterdir():
+                if agents_dir.exists():
+                    for backup_dir in agents_dir.iterdir():
                         if backup_dir.is_dir():
                             for f in backup_dir.iterdir():
                                 f.unlink()
@@ -559,6 +572,42 @@ def manage_unsigned():
         else:
             console.print("[yellow]Invalid selection or no items available for that action.[/yellow]")
 
+@app.command()
+def remove_login_item_cmd(name: str):
+    """Remove a login item by name."""
+    success, message = remove_login_item(name)
+    if success:
+        console.print(f"[green]✓[/green] {message}")
+    else:
+        console.print(f"[red]✗[/red] {message}")
+
+@app.command()
+def backup_ports():
+    """Create a backup of current port state."""
+    success, message = backup_port_state()
+    if success:
+        console.print(f"[green]✓[/green] {message}")
+    else:
+        console.print(f"[red]✗[/red] {message}")
+
+@app.command()
+def close_port(port: str):
+    """Close a specific port by killing the process using it."""
+    success, message = close_port_process(port)
+    if success:
+        console.print(f"[green]✓[/green] {message}")
+    else:
+        console.print(f"[red]✗[/red] {message}")
+
+@app.command()
+def restore_ports(backup_file: str):
+    """Restore port state from a backup file."""
+    success, message = restore_port_state(backup_file)
+    if success:
+        console.print(f"[green]✓[/green] {message}")
+    else:
+        console.print(f"[red]✗[/red] {message}")
+
 @app.callback()
 def main(ctx: typer.Context):
     if ctx.invoked_subcommand is None:
@@ -566,19 +615,21 @@ def main(ctx: typer.Context):
 
 # --- Profile/MDM Management Menu ---
 def profile_mdm_menu():
+    """Manage configuration profiles and MDM status."""
     print_logo()
     current_mdm = get_mdm_info()
     last_mdm = None
-    if MDM_STATE_FILE.exists():
-        with open(MDM_STATE_FILE, "r") as f:
+    mdm_state_file = QUARANTINE_DIR / "mdm_state.json"
+    if mdm_state_file.exists():
+        with open(mdm_state_file, "r") as f:
             last_mdm = f.read()
     if last_mdm is None:
-        with open(MDM_STATE_FILE, "w") as f:
+        with open(mdm_state_file, "w") as f:
             f.write(current_mdm)
         console.print(f"[green]MDM status: {current_mdm}[/green]")
     elif last_mdm != current_mdm:
         console.print(f"[yellow]MDM status has changed![/yellow]\n[bold]Previous:[/bold] {last_mdm}\n[bold]Current:[/bold] {current_mdm}")
-        with open(MDM_STATE_FILE, "w") as f:
+        with open(mdm_state_file, "w") as f:
             f.write(current_mdm)
     else:
         console.print(f"[green]MDM status unchanged.[/green] Current: {current_mdm}")
@@ -647,7 +698,7 @@ def profile_mdm_menu():
                     if success:
                         console.print(f"[green]Profile removed successfully: {msg}[/green]")
                         # Add to watchlist
-                        watchlist_file = Path(__file__).parent / "auto_remove_watchlist.json"
+                        watchlist_file = QUARANTINE_DIR / "auto_remove_watchlist.json"
                         try:
                             if watchlist_file.exists():
                                 with open(watchlist_file, "r") as f:
@@ -767,6 +818,282 @@ def forensics_menu():
             input("\nPress Enter to return to the menu...")
         elif action.lower() == "q":
             break
+
+def manage_login_items():
+    """Manage login items with a menu-driven interface."""
+    print_logo()
+    while True:
+        items = get_login_items()
+        console.print(Panel("[bold magenta]Login Items Management[/bold magenta]"))
+        
+        if items:
+            console.print("[bold green]Current login items:[/bold green]")
+            for idx, item in enumerate(items, 1):
+                formatted = f"{item['display_name']}"
+                if 'path' in item:
+                    formatted += f" ({item['path']})"
+                if 'kind' in item:
+                    formatted += f" [{item['kind']}]"
+                console.print(f"[bold cyan]{idx}.[/bold cyan] {formatted}")
+        else:
+            console.print("[green]No login items found![green]")
+            
+        # Check for backups
+        login_items_dir = Path(__file__).parent / "quarantine" / "login_items"
+        backup_files = sorted(login_items_dir.glob("login_item_backup_*.json"), reverse=True) if login_items_dir.exists() else []
+        
+        if backup_files:
+            console.print("\n[bold yellow]Quarantined login items:[/bold yellow]")
+            for idx, backup in enumerate(backup_files, 1):
+                try:
+                    with open(backup, 'r') as f:
+                        item = json.load(f)
+                    # Extract timestamp from filename
+                    timestamp = backup.stem.split('_')[-2] + ' ' + backup.stem.split('_')[-1]
+                    formatted_time = f"{timestamp[:4]}-{timestamp[4:6]}-{timestamp[6:8]} {timestamp[9:11]}:{timestamp[11:13]}:{timestamp[13:15]}"
+                    console.print(f"[bold magenta]{idx}.[/bold magenta] {item['display_name']} (Backup: {formatted_time})")
+                except Exception:
+                    console.print(f"[bold magenta]{idx}.[/bold magenta] {backup.name}")
+        
+        console.print("\n[bold cyan]1.[/bold cyan] Create backup of login item")
+        console.print("[bold cyan]2.[/bold cyan] Remove login item (creates backup automatically)")
+        if backup_files:
+            console.print("[bold cyan]3.[/bold cyan] Restore from backup")
+            console.print("[bold cyan]4.[/bold cyan] Delete backup")
+        console.print("[bold cyan]5.[/bold cyan] Return to main menu")
+        
+        action = Prompt.ask("Selection", default="5")
+        
+        if action == "1" and items:
+            idx = Prompt.ask("Enter number of login item to backup", default="")
+            if idx.isdigit():
+                idx = int(idx)
+                if 1 <= idx <= len(items):
+                    item = items[idx-1]
+                    success, backup_path = backup_login_item(item)
+                    if success:
+                        console.print(f"[green]✓[/green] Created backup: {backup_path}")
+                    else:
+                        console.print(f"[red]✗[/red] Failed to create backup: {backup_path}")
+                else:
+                    console.print("[red]Invalid selection.[/red]")
+                    
+        elif action == "2" and items:
+            idx = Prompt.ask("Enter number of login item to remove", default="")
+            if idx.isdigit():
+                idx = int(idx)
+                if 1 <= idx <= len(items):
+                    item = items[idx-1]
+                    confirm = Prompt.ask(f"Are you sure you want to remove '{item['display_name']}'? (A backup will be created automatically) (y/n)", default="n")
+                    if confirm.lower() == "y":
+                        success, message = remove_login_item(item['name'])
+                        if success:
+                            console.print(f"[green]✓[/green] {message}")
+                        else:
+                            console.print(f"[red]✗[/red] {message}")
+                else:
+                    console.print("[red]Invalid selection.[/red]")
+                    
+        elif action == "3" and backup_files:
+            idx = Prompt.ask("Enter number of backup to restore", default="")
+            if idx.isdigit():
+                idx = int(idx)
+                if 1 <= idx <= len(backup_files):
+                    backup = backup_files[idx-1]
+                    try:
+                        with open(backup, 'r') as f:
+                            item = json.load(f)
+                        confirm = Prompt.ask(f"Are you sure you want to restore '{item['display_name']}'? (y/n)", default="n")
+                        if confirm.lower() == "y":
+                            success, message = restore_login_item(str(backup))
+                            if success:
+                                console.print(f"[green]✓[/green] {message}")
+                            else:
+                                console.print(f"[red]✗[/red] {message}")
+                    except Exception as e:
+                        console.print(f"[red]Error reading backup: {e}[/red]")
+                else:
+                    console.print("[red]Invalid selection.[/red]")
+                    
+        elif action == "4" and backup_files:
+            idx = Prompt.ask("Enter number of backup to delete", default="")
+            if idx.isdigit():
+                idx = int(idx)
+                if 1 <= idx <= len(backup_files):
+                    backup = backup_files[idx-1]
+                    try:
+                        with open(backup, 'r') as f:
+                            item = json.load(f)
+                        confirm = Prompt.ask(f"Are you sure you want to delete backup of '{item['display_name']}'? (y/n)", default="n")
+                        if confirm.lower() == "y":
+                            backup.unlink()
+                            console.print(f"[green]✓[/green] Backup deleted successfully")
+                    except Exception as e:
+                        console.print(f"[red]Error deleting backup: {e}[/red]")
+                else:
+                    console.print("[red]Invalid selection.[/red]")
+                    
+        elif action == "5":
+            break
+        else:
+            console.print("[yellow]Invalid selection or no items available for that action.[/yellow]")
+
+def cleanup_all_data():
+    """Clean up all quarantined items, logs, and snapshots."""
+    try:
+        if QUARANTINE_DIR.exists():
+            shutil.rmtree(QUARANTINE_DIR)
+            print(f"Cleaned up quarantine directory: {QUARANTINE_DIR}")
+    except Exception as e:
+        print(f"Error during cleanup: {e}")
+
+def manage_ports():
+    """Manage open ports with a menu-driven interface."""
+    print_logo()
+    while True:
+        result = check_network_listeners()
+        listeners = result.get("listeners", [])
+        
+        console.print(Panel("[bold magenta]Open Ports Management[/bold magenta]"))
+        
+        if listeners:
+            console.print("[bold green]Current open ports:[/bold green]")
+            for idx, listener in enumerate(listeners, 1):
+                console.print(f"[bold cyan]{idx}.[/bold cyan] {listener['process']} {listener['port']} (PID: {listener['pid']})")
+        else:
+            console.print("[green]No open ports found![green]")
+            
+        # Check for backups in the correct directory
+        ports_dir = Path(__file__).parent / "quarantine" / "ports"
+        backup_files = sorted(ports_dir.glob("ports_backup_*.json"), reverse=True) if ports_dir.exists() else []
+        
+        if backup_files:
+            console.print("\n[bold yellow]Port state backups:[/bold yellow]")
+            for idx, backup in enumerate(backup_files, 1):
+                # Extract timestamp from filename (format: ports_backup_YYYYMMDD_HHMMSS.json)
+                timestamp = backup.stem.split('_')[-2] + ' ' + backup.stem.split('_')[-1]
+                formatted_time = f"{timestamp[:4]}-{timestamp[4:6]}-{timestamp[6:8]} {timestamp[9:11]}:{timestamp[11:13]}:{timestamp[13:15]}"
+                console.print(f"[bold magenta]{idx}.[/bold magenta] {backup.name} ({formatted_time})")
+        
+        # Add spacing before menu options
+        console.print("")
+        
+        # Build menu options
+        menu_options = [
+            ("1", "Create backup of current port state"),
+            ("2", "Close a port")
+        ]
+        
+        # Add backup management options if backups exist
+        if backup_files:
+            menu_options.extend([
+                ("3", "View backup details"),
+                ("4", "Delete backup")
+            ])
+            
+        # Add return to main menu option
+        menu_options.append(("m", "Return to main menu"))
+        
+        # Print menu options
+        for key, desc in menu_options:
+            console.print(f"[bold cyan]{key}.[/bold cyan] {desc}")
+        
+        action = Prompt.ask("Selection", default="m")
+        
+        if action == "1":
+            success, message = backup_port_state()
+            if success:
+                console.print(f"[green]✓[/green] {message}")
+                # Refresh the menu to show the new backup
+                continue
+            else:
+                console.print(f"[red]✗[/red] {message}")
+                
+        elif action == "2" and listeners:
+            idx = Prompt.ask("Enter number of port to close", default="")
+            if idx.isdigit():
+                idx = int(idx)
+                if 1 <= idx <= len(listeners):
+                    listener = listeners[idx-1]
+                    port = listener['port'].split(':')[-1]  # Extract port number
+                    confirm = Prompt.ask(f"Are you sure you want to close port {port} used by {listener['process']}? (y/n)", default="n")
+                    if confirm.lower() == "y":
+                        success, message = close_port_process(port)
+                        if success:
+                            console.print(f"[green]✓[/green] {message}")
+                            # Refresh the menu to show the new backup
+                            continue
+                        else:
+                            console.print(f"[red]✗[/red] {message}")
+                else:
+                    console.print("[red]Invalid selection.[/red]")
+                    
+        elif action == "3" and backup_files:
+            idx = Prompt.ask("Enter number to view backup details", default="")
+            if idx.isdigit():
+                idx = int(idx)
+                if 1 <= idx <= len(backup_files):
+                    try:
+                        with open(backup_files[idx-1], 'r') as f:
+                            backup = json.load(f)
+                        console.print("\n[bold green]Backup details:[/bold green]")
+                        for item in backup:
+                            console.print(f"Process: {item['process']}")
+                            console.print(f"Port: {item['port']}")
+                            console.print(f"PID: {item['pid']}")
+                            console.print("---")
+                    except Exception as e:
+                        console.print(f"[red]Error reading backup: {e}[/red]")
+                else:
+                    console.print("[red]Invalid selection.[/red]")
+                    
+        elif action == "4" and backup_files:
+            idx = Prompt.ask("Enter number of backup to delete", default="")
+            if idx.isdigit():
+                idx = int(idx)
+                if 1 <= idx <= len(backup_files):
+                    backup = backup_files[idx-1]
+                    confirm = Prompt.ask(f"Are you sure you want to delete backup {backup.name}? (y/n)", default="n")
+                    if confirm.lower() == "y":
+                        backup.unlink()
+                        console.print(f"[green]✓[/green] Backup deleted successfully")
+                        # Refresh the menu after deletion
+                        continue
+                else:
+                    console.print("[red]Invalid selection.[/red]")
+                    
+        elif action.lower() == "m":
+            break
+        else:
+            console.print("[yellow]Invalid selection or no items available for that action.[/yellow]")
+
+@app.command()
+def uninstall():
+    """Uninstall macWatchdog and clean up all data."""
+    confirm = Prompt.ask("Are you sure you want to uninstall macWatchdog? This will remove all quarantined items, logs, and snapshots. (y/n)", default="n")
+    if confirm.lower() == "y":
+        cleanup_all_data()
+        console.print("[green]✓[/green] macWatchdog uninstalled and all data cleaned up.")
+    else:
+        console.print("[yellow]Uninstall cancelled.[/yellow]")
+
+def backup_login_item(item):
+    """Create a backup of a login item."""
+    try:
+        login_items_dir = QUARANTINE_DIR / "login_items"
+        login_items_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create backup with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_file = login_items_dir / f"login_item_backup_{timestamp}.json"
+        
+        # Save the item details
+        with open(backup_file, 'w') as f:
+            json.dump(item, f, indent=2)
+            
+        return True, str(backup_file)
+    except Exception as e:
+        return False, str(e)
 
 if __name__ == "__main__":
     app() 
