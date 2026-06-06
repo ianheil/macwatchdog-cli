@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.2.0 — 2026-06-05
+
+### New checks
+
+- **Quarantine Attributes** — scans `~/Downloads` for installer and script files missing the `com.apple.quarantine` xattr. HIGH when found — its absence on an installer is a known Gatekeeper bypass technique.
+- **Network Listeners: exposed vs localhost** — distinguishes listeners bound to all interfaces (`0.0.0.0`, `*`, `::`) from localhost-only. Exposed listeners flagged at MEDIUM.
+- **Kernel Extensions enriched** — each kext now shows load state (loaded / not loaded), codesign validity, and Apple Silicon inert flag. Management menu added (quarantine/restore from `/Library/Extensions/`).
+
+### Scoring
+
+- Hard severity ceilings: any HIGH finding caps score at AT RISK (65); any CRITICAL caps at VULNERABLE (35). Prevents "mostly clean but FileVault is off" from scoring GOOD.
+- MEDIUM weight raised from 8 → 10.
+- ERROR weight reduced to 1 (tool failure ≠ security risk).
+- Ceiling reason surfaced in the summary line when triggered.
+
+### Bug fixes
+
+- **Auto-updates check rewritten for macOS 26 Tahoe**: reads `SplatEnabled` (security responses), `AutomaticDownload`, and `AutoInstallProductKeys` (macOS auto-install). Shows `Unknown` rather than `Disabled` for keys absent on newer macOS versions. Only fires ALERT when a critical setting is confirmed off.
+- **Firmware Password on Apple Silicon** returns `[ OK ]` with a Secure Enclave note instead of a LOW/SUGGESTION — there's no action to take.
+- **App updates** removed from the auto-updates check — it lives in App Store preferences, not Software Update, and was showing a false "Disabled" on macOS 26.
+- **`.app` bundles now included in quarantine scan** — `stat().st_size` on a directory returns the inode size (~96 bytes), not bundle contents. Fixed to use `is_dir()` for bundles.
+- **authorized_keys unreadable files** now surface as UNKNOWN rather than silently returning empty (which hid root's keys when running as a standard user).
+- **sudoers** now catches `OSError` in addition to `PermissionError` so an I/O error mid-read doesn't abort the remaining file loop silently.
+- **kexts restore path traversal** fixed: `original_path` from the `.meta` sidecar is now validated to `/Library/Extensions/` before a root-privileged `shutil.move()`.
+- **IPv4-mapped all-interface addresses** (`[::ffff:0.0.0.0]`) now correctly classified as exposed rather than localhost-only.
+
+---
+
 ## 2.1.0 — 2026-06-03
 
 ### New checks
