@@ -95,6 +95,27 @@ def find_unsigned_agents() -> list[str]:
     return unsigned
 
 
+def list_all_agents() -> list[dict]:
+    """Return all non-Apple third-party launch agents with basic metadata."""
+    agents = []
+    for path_str in AGENT_PATHS:
+        if not os.path.exists(path_str):
+            continue
+        for entry in sorted(os.listdir(path_str)):
+            if not entry.endswith(".plist"):
+                continue
+            if _is_apple_agent(entry):
+                continue
+            full = os.path.join(path_str, entry)
+            agents.append({
+                "path": full,
+                "name": os.path.splitext(entry)[0],
+                "directory": os.path.basename(path_str),
+                "unsigned": is_unsigned(full),
+            })
+    return agents
+
+
 def check_launch_agents() -> CheckResult:
     """Return suspicious launch agents/daemons.
 

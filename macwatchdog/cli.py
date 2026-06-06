@@ -255,6 +255,114 @@ def status() -> None:
     ui.console.print()
 
 
+@app.command("list-ports")
+def list_ports_cmd() -> None:
+    """List current network listeners as JSON."""
+    from .audit.network_listeners import list_listeners
+    listeners = list_listeners()
+    typer.echo(json.dumps(
+        [{"process": l.process, "pid": l.pid, "port": l.port, "exposed": l.exposed}
+         for l in listeners],
+        indent=2,
+    ))
+
+
+@app.command("list-login-items")
+def list_login_items_cmd() -> None:
+    """List classic login items as JSON."""
+    from dataclasses import asdict
+    from .managers.login_items import list_login_items
+    typer.echo(json.dumps([asdict(i) for i in list_login_items()], indent=2))
+
+
+@app.command("list-agents")
+def list_agents_cmd() -> None:
+    """List third-party launch agents and quarantined items as JSON."""
+    from .audit.launch_agents import list_all_agents
+    from .managers.agents import list_quarantined
+    try:
+        quarantined = [
+            str(p) for p in list_quarantined()
+            if not str(p).endswith(".meta")
+        ]
+    except OSError:
+        quarantined = []
+    typer.echo(json.dumps(
+        {"agents": list_all_agents(), "quarantined": quarantined},
+        indent=2,
+    ))
+
+
+@app.command("quarantine-agent")
+def quarantine_agent_cmd(path: str = typer.Argument(..., help="Full path to the .plist file.")) -> None:
+    """Move a launch agent to quarantine."""
+    from .managers.agents import quarantine_agents
+    _, moved, failed = quarantine_agents([path])
+    typer.echo(json.dumps({"moved": moved, "failed": failed}))
+    if failed and not moved:
+        raise typer.Exit(1)
+
+
+@app.command("restore-agent")
+def restore_agent_cmd(path: str = typer.Argument(..., help="Full path in the quarantine directory.")) -> None:
+    """Restore a quarantined launch agent."""
+    from pathlib import Path
+    from .managers.agents import restore_agents
+    restored, failed = restore_agents([Path(path)])
+    typer.echo(json.dumps({"restored": restored, "failed": failed}))
+    if failed and not restored:
+        raise typer.Exit(1)
+
+
+@app.command("list-kexts")
+def list_kexts_cmd() -> None:
+    """List installed kernel extensions and quarantined items as JSON."""
+    from .managers.kexts import list_installed, list_quarantined
+    installed = [
+        {
+            "name": k.name,
+            "path": str(k.path),
+            "bundle_id": k.bundle_id,
+            "loaded": k.loaded,
+            "signed": k.signed,
+        }
+        for k in list_installed()
+    ]
+    try:
+        quarantined = [str(p) for p in list_quarantined()]
+    except OSError:
+        quarantined = []
+    typer.echo(json.dumps({"installed": installed, "quarantined": quarantined}, indent=2))
+
+
+@app.command("quarantine-kext")
+def quarantine_kext_cmd(path: str = typer.Argument(..., help="Full path to the .kext bundle.")) -> None:
+    """Move a kernel extension to quarantine (requires root)."""
+    if os.geteuid() != 0:
+        typer.echo(json.dumps({"error": "Quarantining kexts requires root."}), err=True)
+        raise typer.Exit(1)
+    from pathlib import Path
+    from .managers.kexts import quarantine_kexts
+    _, moved, failed = quarantine_kexts([Path(path)])
+    typer.echo(json.dumps({"moved": moved, "failed": failed}))
+    if failed and not moved:
+        raise typer.Exit(1)
+
+
+@app.command("restore-kext")
+def restore_kext_cmd(path: str = typer.Argument(..., help="Full path in the quarantine directory.")) -> None:
+    """Restore a quarantined kernel extension (requires root)."""
+    if os.geteuid() != 0:
+        typer.echo(json.dumps({"error": "Restoring kexts requires root."}), err=True)
+        raise typer.Exit(1)
+    from pathlib import Path
+    from .managers.kexts import restore_kexts
+    restored, failed = restore_kexts([Path(path)])
+    typer.echo(json.dumps({"restored": restored, "failed": failed}))
+    if failed and not restored:
+        raise typer.Exit(1)
+
+
 @app.command()
 def timeline(limit: int = typer.Option(50, help="Number of most-recent events to show.")) -> None:
     """View recent events from the structured JSONL timeline."""
