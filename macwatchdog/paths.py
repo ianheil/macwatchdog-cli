@@ -77,3 +77,7 @@ def mdm_state_file() -> Path:
 
 def watchlist_file() -> Path:
     return data_dir() / "auto_remove_watchlist.json"
+
+
+def scan_history_file() -> Path:
+    return data_dir() / "scan_history.json"

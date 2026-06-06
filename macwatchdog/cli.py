@@ -21,7 +21,7 @@ from .logo import print_logo
 from .managers import ports as ports_manager
 from .managers.login_items import remove_login_item as _remove_login_item
 from .reports import export_report
-from .runner import flatten, render_report, render_summary, report_to_dict, run_checks
+from .runner import flatten, render_report, render_summary, report_to_dict, run_checks, run_checks_streaming
 from .scoring import compute_score, score_band
 from .severity import Severity
 
@@ -88,7 +88,7 @@ def check(
     ctx: typer.Context,
     all_: bool = typer.Option(False, "--all", help="Run every registered check."),
     checks: Optional[str] = typer.Option(None, "--checks", help="Comma-separated check numbers."),
-    output_format: str = typer.Option("text", "--format", help="Output format: text or json."),
+    output_format: str = typer.Option("text", "--format", help="Output format: text, json, or stream-json."),
 ) -> None:
     """Run checks non-interactively."""
     severity = ctx.obj["min_severity"] if ctx.obj else Severity.OK
@@ -107,6 +107,18 @@ def check(
             typer.echo("No valid check numbers given.", err=True)
             raise typer.Exit(2)
 
+    if output_format == "stream-json":
+        from .reports.snapshot import write_scan_history
+        summary = None
+        for event in run_checks_streaming(selection):
+            sys.stdout.write(json.dumps(event, default=str) + "\n")
+            sys.stdout.flush()
+            if event.get("type") == "summary":
+                summary = event
+        if summary:
+            write_scan_history(summary)
+        return
+
     if output_format == "text" and sys.stdout.isatty():
         root_count = sum(1 for c in CHECKS if c.requires_root)
         print_logo()
@@ -120,7 +132,7 @@ def check(
         typer.echo(json.dumps(report_to_dict(report), indent=2, default=str))
         return
     if output_format != "text":
-        typer.echo(f"Unknown --format {output_format!r} (expected text or json).", err=True)
+        typer.echo(f"Unknown --format {output_format!r} (expected text, json, or stream-json).", err=True)
         raise typer.Exit(2)
 
     render_report(report, min_severity=severity)
@@ -168,10 +180,23 @@ def close_port(port: str) -> None:
 @app.command()
 def scan(
     ctx: typer.Context,
-    output_format: str = typer.Option("text", "--format", help="Output format: text or json."),
+    output_format: str = typer.Option("text", "--format", help="Output format: text, json, or stream-json."),
 ) -> None:
     """Run all checks. Shorthand for 'check --all'."""
     severity = ctx.obj["min_severity"] if ctx.obj else Severity.OK
+
+    if output_format == "stream-json":
+        from .reports.snapshot import write_scan_history
+        summary = None
+        for event in run_checks_streaming():
+            sys.stdout.write(json.dumps(event, default=str) + "\n")
+            sys.stdout.flush()
+            if event.get("type") == "summary":
+                summary = event
+        if summary:
+            write_scan_history(summary)
+        return
+
     if output_format == "text" and sys.stdout.isatty():
         root_count = sum(1 for c in CHECKS if c.requires_root)
         print_logo()

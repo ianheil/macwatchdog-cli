@@ -56,6 +56,7 @@ class RegisteredCheck:
     description: str = ""
     requires_root: bool = False
     slow: bool = False
+    can_remediate: str | None = None  # "agents" | "kexts" | "login_items" | "ports"
 
 
 CHECKS: tuple[RegisteredCheck, ...] = (
@@ -71,9 +72,11 @@ CHECKS: tuple[RegisteredCheck, ...] = (
 
     # --- Persistence -----------------------------------------------------------
     RegisteredCheck("Launch Agents/Daemons", check_launch_agents, "Launch Agents/Daemons",
-        description="Unsigned or suspicious launchd agents and daemons"),
+        description="Unsigned or suspicious launchd agents and daemons",
+        can_remediate="agents"),
     RegisteredCheck("Login Items", check_login_items, "Login Items",
-        description="Applications and daemons launching at login"),
+        description="Applications and daemons launching at login",
+        can_remediate="login_items"),
     RegisteredCheck("Cron Jobs & Periodic Scripts", check_cron_jobs, "Persistence",
         description="User crontab and /etc/periodic script audit"),
     RegisteredCheck("SSH Authorized Keys", check_authorized_keys, "Persistence",
@@ -101,7 +104,8 @@ CHECKS: tuple[RegisteredCheck, ...] = (
 
     # --- Network ---------------------------------------------------------------
     RegisteredCheck("Network Listeners (Open Ports)", check_network_listeners, "Network Listeners",
-        description="Processes listening on network ports"),
+        description="Processes listening on network ports",
+        can_remediate="ports"),
     RegisteredCheck("Network Interfaces & Connections", check_network, "Network",
         description="Active interfaces and established connections"),
 
@@ -109,7 +113,8 @@ CHECKS: tuple[RegisteredCheck, ...] = (
     RegisteredCheck("USB Devices", check_usb, "USB",
         description="Connected USB device inventory"),
     RegisteredCheck("Kernel Extensions", check_kernel_extensions, "Kernel Extensions",
-        description="Third-party kernel and system extensions"),
+        description="Third-party kernel and system extensions",
+        can_remediate="kexts"),
 
     # --- System Hardening ------------------------------------------------------
     RegisteredCheck("System Integrity Protection (SIP)", check_sip, "System Hardening",

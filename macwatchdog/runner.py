@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import sys
+import time
+import uuid
 from collections import Counter
-from typing import Iterable
+from typing import Iterable, Iterator
 
 from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 
@@ -74,6 +76,63 @@ def run_checks(
         for check in items:
             _execute(check, report)
     return report
+
+
+def run_checks_streaming(
+    checks: Iterable[RegisteredCheck] = CHECKS,
+) -> Iterator[dict]:
+    """Yield one JSON-serialisable dict per event for NDJSON streaming.
+
+    Protocol (``type`` field):
+      ``start``    — scan begun; includes total check count and a unique scan_id.
+      ``progress`` — emitted before each check runs; ``completed`` is the count
+                     of checks that have already finished.
+      ``result``   — one per CheckResult produced by a check; includes
+                     ``can_remediate`` so the GUI can show action buttons.
+      ``summary``  — final score, band, severity counts, and elapsed time.
+    """
+    from .scoring import compute_score, score_band
+
+    items = list(checks)
+    scan_id = str(uuid.uuid4())
+    start_time = time.monotonic()
+
+    yield {"type": "start", "total": len(items), "scan_id": scan_id}
+
+    report: dict[str, list[CheckResult]] = {}
+    for i, check in enumerate(items):
+        yield {
+            "type": "progress",
+            "completed": i,
+            "total": len(items),
+            "running": check.name,
+            "category": check.category,
+        }
+        before = len(report.get(check.category, []))
+        _execute(check, report)
+        for result in report.get(check.category, [])[before:]:
+            d = result.to_dict()
+            d["type"] = "result"
+            d["can_remediate"] = check.can_remediate
+            yield d
+
+    elapsed = time.monotonic() - start_time
+    score, ceiling_reason = compute_score(report)
+    band, _ = score_band(score)
+    counts = {
+        sev.name: n
+        for sev, n in Counter(r.resolved_severity() for r in flatten(report)).items()
+    }
+
+    yield {
+        "type": "summary",
+        "scan_id": scan_id,
+        "score": score,
+        "band": band,
+        "ceiling_reason": ceiling_reason,
+        "counts": counts,
+        "elapsed": round(elapsed, 2),
+    }
 
 
 def _execute(check: RegisteredCheck, report: dict[str, list[CheckResult]]) -> None:

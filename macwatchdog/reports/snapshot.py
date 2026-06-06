@@ -4,7 +4,8 @@ file under ``paths.snapshots_dir()`` so two snapshots can be diffed later."""
 from __future__ import annotations
 
 import json
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -25,14 +26,16 @@ def _run_all() -> dict[str, list[Any]]:
     return snapshot
 
 
-def create_snapshot() -> Path:
+def create_snapshot(scan_id: str | None = None) -> Path:
+    sid = scan_id or str(uuid.uuid4())
     path = paths.snapshots_dir() / f"snapshot_{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
     data = {
+        "scan_id": sid,
         "created_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "checks": _run_all(),
     }
     path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
-    log_event("snapshot.created", path=str(path))
+    log_event("snapshot.created", path=str(path), scan_id=sid)
     return path
 
 
@@ -53,6 +56,38 @@ def _profile_identifiers(snapshot: dict[str, Any]) -> set[str]:
                     if ident:
                         identifiers.add(ident)
     return identifiers
+
+
+def write_scan_history(summary: dict[str, Any]) -> None:
+    """Append a scan summary to the lightweight history index.
+
+    Keeps the last 100 entries. The GUI reads this file to populate its
+    history sidebar without loading full snapshot blobs.
+    """
+    history_path = paths.scan_history_file()
+    history: list[dict[str, Any]] = []
+    if history_path.exists():
+        try:
+            history = json.loads(history_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    entry: dict[str, Any] = {
+        "scan_id": summary.get("scan_id", str(uuid.uuid4())),
+        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "score": summary.get("score"),
+        "band": summary.get("band"),
+        "ceiling_reason": summary.get("ceiling_reason"),
+        "counts": summary.get("counts", {}),
+        "elapsed": summary.get("elapsed"),
+    }
+    history.append(entry)
+    history = history[-100:]
+    try:
+        history_path.write_text(json.dumps(history, indent=2, default=str), encoding="utf-8")
+        log_event("scan.recorded", scan_id=entry["scan_id"], score=entry["score"])
+    except OSError:
+        pass
 
 
 def compare_snapshots(a: Path, b: Path) -> dict[str, list[str]]:
