@@ -219,14 +219,23 @@ def check_screen_sharing() -> CheckResult:
     result = run(["launchctl", "list"], timeout=10)
     if not result.ok:
         return CheckResult("Screen Sharing", "ERROR", info="Unable to query launchctl.")
-    lines = result.stdout.splitlines()
-    loaded = any("com.apple.screensharing" in line for line in lines)
+    # launchctl list columns: PID  Status  Label
+    # A dash ("-") in column 0 means the service is registered but not running.
+    # Only flag if the PID is a real number (service is actively running).
+    running = False
+    for line in result.stdout.splitlines():
+        if "com.apple.screensharing" not in line:
+            continue
+        parts = line.split()
+        if parts and parts[0] != "-":
+            running = True
+        break
     return CheckResult(
         label="Screen Sharing",
-        status="ALERT" if loaded else "OK",
-        severity=Severity.MEDIUM if loaded else Severity.OK,
-        info="service loaded" if loaded else "not running",
-        tip="" if not loaded else "Disable in System Settings > General > Sharing unless actively needed.",
+        status="ALERT" if running else "OK",
+        severity=Severity.MEDIUM if running else Severity.OK,
+        info="service running" if running else "not running",
+        tip="" if not running else "Disable in System Settings > General > Sharing unless actively needed.",
     )
 
 
