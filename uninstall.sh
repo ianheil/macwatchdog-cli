@@ -1,41 +1,58 @@
-#!/bin/bash
-# Uninstall script for macWatchdog
-# Removes all files, virtual environment, and shell alias
+#!/usr/bin/env bash
+# macWatchdog uninstaller.
 
-set -e
+set -euo pipefail
 
-INSTALL_DIR="$HOME/macwatchdog"
-ALIAS_NAME="macwatchdog"
-SHELL_RC="$HOME/.zshrc"
-if [ -n "$BASH_VERSION" ]; then
-    SHELL_RC="$HOME/.bashrc"
+SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+info() { printf '%s\n' "$*"; }
+
+info "Removing macWatchdog..."
+
+if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q macwatchdog; then
+    pipx uninstall macwatchdog
 fi
 
-# Remove the install directory
-if [ -d "$INSTALL_DIR" ]; then
-    echo "Removing $INSTALL_DIR..."
-    rm -rf "$INSTALL_DIR"
-else
-    echo "$INSTALL_DIR not found."
-fi
-
-# Remove the alias from shell rc file
-if grep -q "$ALIAS_NAME" "$SHELL_RC"; then
-    echo "Removing alias from $SHELL_RC..."
-    sed -i.bak "/alias $ALIAS_NAME=/d" "$SHELL_RC"
-    echo "Alias removed. (Backup saved as $SHELL_RC.bak)"
-else
-    echo "Alias not found in $SHELL_RC."
-fi
-
-# Remove any remaining logs, quarantine, or snapshots in CLI if run from source
-SCRIPT_DIR="$(dirname "$0")"
-for f in "quarantine" "snapshots" "watchdog_timeline.log" "mdm_state.json" "report.txt"; do
-    if [ -e "$SCRIPT_DIR/$f" ]; then
-        echo "Removing $SCRIPT_DIR/$f..."
-        rm -rf "$SCRIPT_DIR/$f"
+SYMLINK="/usr/local/bin/macwatchdog"
+if [[ -L "$SYMLINK" ]]; then
+    if [[ -w "$SYMLINK" ]]; then
+        rm -f "$SYMLINK"
+    else
+        sudo rm -f "$SYMLINK"
     fi
+    info "Removed $SYMLINK"
+fi
 
+if [[ -d "$SCRIPT_DIR/venv" ]]; then
+    rm -rf "$SCRIPT_DIR/venv"
+    info "Removed $SCRIPT_DIR/venv"
+fi
+
+DATA_DIR="${MACWATCHDOG_DATA_DIR:-$HOME/Library/Application Support/macwatchdog}"
+if [[ -d "$DATA_DIR" ]]; then
+    read -r -p "Also delete runtime data in '$DATA_DIR'? [y/N] " answer
+    case "$answer" in
+        y|Y|yes|YES)
+            rm -rf "$DATA_DIR"
+            info "Removed $DATA_DIR"
+            ;;
+        *)
+            info "Leaving data dir in place."
+            ;;
+    esac
+fi
+
+# Clean any legacy in-tree data too.
+for f in quarantine snapshots watchdog_timeline.log timeline.jsonl mdm_state.json report.txt report.json auto_remove_watchlist.json; do
+    target="$SCRIPT_DIR/$f"
+    if [[ -e "$target" ]]; then
+        if [[ -w "$target" ]]; then
+            rm -rf "$target"
+        else
+            sudo rm -rf "$target"
+        fi
+        info "Removed $target"
+    fi
 done
 
-echo "Uninstall complete. You may want to restart your terminal session." 
+info "Uninstall complete."

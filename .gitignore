@@ -1,11 +1,34 @@
-venv/
+# Python
 __pycache__/
-.DS_Store
-*.log
-snapshots/
-quarantine/
 *.pyc
-watchdog_timeline.log
-mdm_state.json 
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Virtual environments
+venv/
+.venv/
+
+# Packaging
+dist/
+build/
 *.zip
+
+# macOS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+
+# macwatchdog runtime artifacts (legacy path — new builds write to
+# ~/Library/Application Support/macwatchdog, but ignore anything lingering
+# here so accidental re-runs from the source tree never get committed).
+quarantine/
+snapshots/
+mdm_state.json
+watchdog_timeline.log
+timeline.jsonl
+auto_remove_watchlist.json
 report.txt
+report.json

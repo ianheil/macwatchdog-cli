@@ -1,185 +1,162 @@
 # macWatchdog
 
-Privacy-focused macOS CLI tool to audit and manage security, privacy, MDM enrollment, remote access, and configuration profiles.
-Gain visibility and control over what's active on your Mac—whether you're a general user, power user, or IT professional.
+Privacy-focused macOS security auditor. Scans your system for persistence mechanisms, privilege escalation paths, privacy exposure, network exposure, and hardening gaps — then gives you a 0–100 security score and direct remediation for what it finds.
 
-[MIT License](./LICENSE) | Python 3.8+ | macOS
+[MIT License](./LICENSE) · Python 3.10+ · macOS Monterey – Sequoia · [Audit coverage](./AUDIT.md) · [Changelog](./CHANGELOG.md)
 
-## Table of Contents
-- [Important Note About macOS Privacy Popups](#important-note-about-macos-privacy-popups)
-- [Features](#features)
-- [Installation](#installation)
-- [Uninstallation](#uninstallation)
-- [Usage](#usage)
-- [Maintenance & Housekeeping](#maintenance--housekeeping)
-- [Help / About](#help--about)
-- [Requirements](#requirements)
-- [License](#license)
-- [Screenshots](#screenshots)
+---
 
-## Important Note About macOS Privacy Popups
+## What it checks
 
-Some checks (such as Login Items, Accessibility, and Full Disk Access) require your terminal to access system services via AppleScript or direct database queries. On macOS, this may trigger a popup such as:
+28 checks across 8 categories:
 
-> "iTerm.app" wants access to control "System Events.app". Allowing control will provide access to documents and data in "System Events.app", and to perform actions within that app.
+| Category | Checks |
+|---|---|
+| **Identity & Enrollment** | MDM/DEP enrollment, SSH remote login, local admin group |
+| **Persistence** | Launch agents/daemons, login items, cron jobs, SSH authorized_keys |
+| **Privilege Escalation** | Sudoers NOPASSWD entries |
+| **Privacy & TCC** | TCC grants (camera, mic, screen recording, FDA), app privacy capabilities |
+| **Network** | Open ports/listeners, network interfaces |
+| **Hardware** | USB devices, kernel & system extensions |
+| **System Hardening** | SIP, Gatekeeper, XProtect, firewall + stealth, FileVault, auto-updates, screen sharing, remote Apple Events, guest account, Bluetooth, firmware password |
+| **Filesystem** | World-writable files in sensitive directories |
 
-This is a normal part of macOS's privacy protections (TCC). If you want a full audit, you should click **Allow**. If you click **Don't Allow**, some checks may fail or return incomplete results, but the rest of the tool will still work.
+Some checks need root for complete results. Run `sudo macwatchdog scan` for a full audit.
 
-macWatchdog never sends data off your device and is designed to be privacy-first.
+---
 
-## Features
-- Audit MDM enrollment, remote access, launch agents/daemons, configuration profiles, USB devices, network interfaces, and more
-- Unsigned Launch Agents/Daemons Management: Detect, quarantine, restore, or purge unsigned launch agents/daemons with automatic backup creation
-- Login Items Management: View, backup, remove, and restore login items with automatic backup creation
-- Port Management: Monitor open ports, create backups of port state, and safely close ports with automatic backup creation
-- Detect world-writable/suspicious files, unknown admin users, login items, open network listeners, and apps with Accessibility/Full Disk Access
-- Profile/MDM Deep Dive: List, flag, and remove user-removable configuration profiles; alert on MDM changes; restore instructions for profiles
-- Forensics & Reporting: Export system snapshots, compare snapshots, view a timeline/log of changes, and clear logs/snapshots
-- Housekeeping: Easily clear logs, snapshots, and quarantine items from the menu
-- Export reports to text or JSON
-- Modular, open source, and privacy-first
+## Highlights
 
-## Installation
+- **Security score** — a 0–100 score after every scan. SECURE / GOOD / AT RISK / VULNERABLE / CRITICAL bands.
+- **Inline format** — clean results like `[ OK ]  FileVault  —  encrypted`. Findings expand with detail bullets and actionable tips.
+- **Safe remediation with backups** — quarantine unsigned launch agents, remove login items, close open ports (SIGTERM → SIGKILL). Every action creates a backup you can restore.
+- **Forensics** — JSON snapshots of every check, diff between two snapshots, structured JSONL timeline of all actions taken.
+- **Machine-readable** — `macwatchdog scan --format json` and `macwatchdog export report.json` for pipelines and SIEM ingestion.
+- **Privacy-first** — no network requests, no telemetry. All data lives under `~/Library/Application Support/macwatchdog/`.
 
-1. **Download the latest release archive** (e.g., `macwatchdog-<version>.zip`). The latest release archive is included in this repository for your convenience.
-2. **Run the install script:**
+---
 
-   ```sh
-   cd macwatchdog-<version>
-   bash install.sh
-   ```
+## macOS permission prompts
 
-   - This will:
-     - Unpack the archive to `~/macwatchdog`
-     - Create a Python virtual environment in `~/macwatchdog/venv`
-     - Install all dependencies into the virtual environment
-     - Add a shell alias (`macwatchdog`) to your `~/.zshrc` or `~/.bashrc` for easy access
+Some checks (TCC privacy, login items, MDM) access system services via AppleScript or read system databases. macOS will prompt for **Automation** or **Full Disk Access** the first time. Click **Allow** for the most complete results. If denied, those checks degrade to `SKIPPED` or `UNKNOWN` and the rest of the tool keeps working.
 
-3. **Restart your terminal** (or run `source ~/.zshrc` or `source ~/.bashrc` as appropriate).
+---
 
-4. **Run macWatchdog from anywhere:**
+## Install
 
-   ```sh
-   macwatchdog
-   ```
-
-   This will launch the interactive CLI menu. If you prefer, you can also run the tool directly with:
-   ```sh
-   python3 ~/macwatchdog/CLI/main.py
-   ```
-
-## Uninstallation
-
-To fully remove macWatchdog, its data, and the shell alias:
+### One-liner (pipx — recommended)
 
 ```sh
-cd macwatchdog-<version>
-bash uninstall.sh
+pipx install git+https://github.com/ianheil/macwatchdog-cli.git
 ```
 
-- This will remove the install directory (`~/macwatchdog`), the shell alias, and any logs, quarantine, or snapshot files created by the tool.
-- You may want to restart your terminal session after uninstalling.
+Requires [pipx](https://pipx.pypa.io). If you don't have it:
+
+```sh
+brew install pipx && pipx ensurepath
+```
+
+### Clone and install
+
+```sh
+git clone https://github.com/ianheil/macwatchdog-cli.git
+cd macwatchdog-cli
+./install.sh        # uses pipx if available, otherwise venv + symlink
+```
+
+### Uninstall
+
+```sh
+pipx uninstall macwatchdog
+# or from the cloned directory:
+./uninstall.sh
+```
+
+Uninstalling preserves `~/Library/Application Support/macwatchdog/` — your quarantine backups, snapshots, and timeline are kept unless you explicitly choose to delete them.
+
+---
 
 ## Usage
 
-### Interactive Menu
-
-Run the interactive menu (after install):
+### Interactive menu
 
 ```sh
-macwatchdog
+macwatchdog            # standard user
+sudo macwatchdog       # elevated — all checks available
 ```
 
-You will see a menu with options to run all checks, select specific checks, manage unsigned launch agents/daemons, manage login items, manage open ports, search for items, manage profiles/MDM, use forensics/reporting tools, export reports, view help/about, and view the README.
+The interactive menu opens on launch. Navigation:
 
-### Command-Line Options
+| Section | Options |
+|---|---|
+| **SCAN** | Full audit, select checks |
+| **MANAGE** | Launch agents/daemons, login items, open ports |
+| **INVESTIGATE** | Keyword search, MDM/profiles, forensics & timeline |
+| **SESSION** | Export report, help, quit |
 
-Run all checks directly:
+After each scan the menu shows your last score and flags any findings with direct remediation links.
+
+### CLI — non-interactive
 
 ```sh
-macwatchdog check --all
+macwatchdog scan                          # full audit, human output
+macwatchdog scan --format json            # full audit, JSON output
+macwatchdog status                        # quick score + top findings only
+macwatchdog check --checks 1,3,5,17      # run a specific subset
+macwatchdog list-checks                   # numbered list with descriptions
+macwatchdog export report.txt             # run all checks, write text file
+macwatchdog export report.json            # run all checks, write JSON file
+macwatchdog --min-severity MEDIUM scan    # only show MEDIUM and above
+macwatchdog --no-color scan               # disable colour output
+macwatchdog timeline --limit 100          # view forensic event log
+macwatchdog close-port 8080               # graceful shutdown (SIGTERM → SIGKILL)
+macwatchdog backup-ports                  # snapshot current listeners to JSON
+macwatchdog remove-login-item "App Name"  # remove a classic login item
 ```
 
-Run specific checks (by number):
+**Environment variables:**
 
-```sh
-macwatchdog check --checks 1,3,5
-```
+- `MACWATCHDOG_DATA_DIR` — override the default data directory
+- `NO_COLOR` / `MACWATCHDOG_NO_COLOR=1` — disable colour output
 
-Export the last report from the menu to a text or JSON file.
+### Severity tiers
 
-### Unsigned Launch Agents/Daemons Management
+| Badge | Level | Meaning |
+|---|---|---|
+| `[ OK ]` | OK | Checked and clean |
+| `[ INFO ]` | INFO | Informational — review at your leisure |
+| `[ LOW ]` | LOW | Hardening suggestion |
+| `[ MED ]` | MEDIUM | Likely needs attention |
+| `[ HIGH ]` | HIGH | Act soon |
+| `[ CRIT ]` | CRITICAL | Immediate action recommended |
+| `[ ERR ]` | ERROR | Tool-level failure |
 
-The unsigned launch agents/daemons management feature allows you to:
-- View all unsigned launch agents and daemons currently on your system
-- Quarantine selected or all unsigned agents/daemons (creates automatic backups)
-- View quarantined agents/daemons with their backup timestamps
-- Restore quarantined agents/daemons to their original locations
-- Purge all quarantined items when no longer needed
+Use `--min-severity MEDIUM` to filter to actionable findings only.
 
-This feature helps identify and manage potentially suspicious or unwanted launch agents and daemons that aren't properly signed.
-
-### Login Items Management
-
-The login items management feature allows you to:
-- View all current login items with their details (name, path, type)
-- Create backups of login items before making changes
-- Remove login items with automatic backup creation
-- Restore login items from backups
-- Delete old backups when no longer needed
-
-### Port Management
-
-The port management feature allows you to:
-- View all currently open ports and their associated processes
-- Create backups of the current port state (useful for auditing and documentation)
-- Safely close ports with automatic backup creation
-- View backup details and manage backup files
-
-Note: While the tool can create backups of port state, it does not attempt to restore processes as this would require specific process arguments and configurations that vary by application.
-
-### Search Functionality
-
-The search feature allows you to:
-- Search for agents, profiles, login items, or files by keyword
-- View detailed information about found items
-- Take actions on found items (disable/quarantine, restore)
-- Search across multiple locations including:
-  - Launch agents/daemons
-  - Configuration profiles
-  - Login items
-  - Quarantined items
-
-## Maintenance & Housekeeping
-
-- **Clear Timeline/Log:** Use the Forensics & Reporting menu to clear the forensic timeline/log.
-- **Clear Snapshots:** Use the Forensics & Reporting menu to delete all saved snapshots.
-- **Purge Quarantine:** Use the Manage Unsigned Launch Agents/Daemons menu to permanently delete all quarantined items.
-- **Delete Backups:** Use the respective management menus to delete old backups of login items and port states.
-- **Uninstall:** Use the uninstall command to completely remove macWatchdog and all its data.
-
-## Help / About
-
-- Access the Help/About menu from the interactive CLI for a summary of features, privacy notes, and usage tips.
-- View the README from the menu for full documentation.
-- For version info, run:
-  ```sh
-  macwatchdog version
-  ```
+---
 
 ## Requirements
-- Python 3.8+
-- macOS (tested on recent versions)
-- Run with `sudo` for full results (some checks require admin privileges)
+
+- Python 3.10+
+- macOS Monterey (12), Ventura (13), Sonoma (14), or Sequoia (15)
+- Some checks require `sudo` — see `macwatchdog list-checks` for which ones
+
+---
+
+## Development
+
+```sh
+git clone https://github.com/ianheil/macwatchdog-cli.git
+cd macwatchdog-cli
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .[dev]
+pytest
+```
+
+See [AUDIT.md](./AUDIT.md) for the full check catalogue — what each check inspects, its blind spots, and required privileges.
+
+---
 
 ## License
 
-This project is open source and available under the [MIT License](./LICENSE).
-
-## Screenshots
-
-### Initial View
-![macWatchdog CLI initial view](screenshots/macwatchdog-cli.png)
-
-### Select Checks Menu
-![Select checks to run menu](screenshots/select-checks.png) 
+MIT — see [LICENSE](./LICENSE).

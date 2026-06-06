@@ -1,31 +1,14 @@
-#!/bin/bash
-# Build script for macWatchdog
-# Packages the CLI directory and necessary files for distribution
+#!/usr/bin/env bash
+# Build a sdist + wheel for macWatchdog.
 
-set -e
+set -euo pipefail
 
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-ARCHIVE_NAME="macwatchdog-$(cat VERSION).zip"
+rm -rf dist build *.egg-info
+python3 -m pip install --quiet --upgrade build
+python3 -m build
 
-# Build the list of files to include
-find . \
-  -path './venv' -prune -o \
-  -path './.git' -prune -o \
-  -path './__pycache__' -prune -o \
-  -path './quarantine' -prune -o \
-  -path './snapshots' -prune -o \
-  -path './screenshots' -prune -o \
-  -name '*.pyc' -prune -o \
-  -name 'watchdog_timeline.log' -prune -o \
-  -name 'mdm_state.json' -prune -o \
-  -name 'report.txt' -prune -o \
-  -name '.DS_Store' -prune -o \
-  -name '*.zip' -prune -o \
-  -name '.filelist.txt' -prune -o \
-  -type f -print > .filelist.txt
-
-zip "$ARCHIVE_NAME" -@ < .filelist.txt
-rm .filelist.txt
-
-echo "Build complete: $ARCHIVE_NAME" 
+echo "Artifacts:"
+ls -1 dist/
