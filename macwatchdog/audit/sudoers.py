@@ -56,7 +56,7 @@ def check_sudoers() -> CheckResult:
             return CheckResult(
                 label="Sudoers Configuration",
                 status="UNKNOWN",
-                severity=Severity.LOW,
+                severity=Severity.INFO,
                 info="Cannot read sudoers — requires root.",
                 tip="Run as root ('sudo macwatchdog') for a complete sudoers check.",
             )

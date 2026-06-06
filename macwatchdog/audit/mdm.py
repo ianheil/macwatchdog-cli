@@ -20,7 +20,7 @@ def check_mdm_and_dep() -> CheckResult:
         return CheckResult(
             label="MDM & DEP Enrollment",
             status="UNKNOWN",
-            severity=Severity.LOW,
+            severity=Severity.INFO,
             info="`profiles` binary not found on this system.",
         )
 
@@ -30,7 +30,7 @@ def check_mdm_and_dep() -> CheckResult:
         return CheckResult(
             label="MDM & DEP Enrollment",
             status="UNKNOWN",
-            severity=Severity.LOW,
+            severity=Severity.INFO,
             tip="Run as root ('sudo macwatchdog') for accurate MDM/DEP enrollment status.",
         )
 

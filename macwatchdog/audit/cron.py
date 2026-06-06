@@ -61,7 +61,7 @@ def _system_crontabs() -> CheckResult | None:
         return CheckResult(
             "System Crontabs",
             "UNKNOWN",
-            severity=Severity.LOW,
+            severity=Severity.INFO,
             info="Cannot read /var/at/tabs — requires root.",
         )
     if not tabs:

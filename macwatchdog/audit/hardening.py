@@ -201,7 +201,7 @@ def check_remote_apple_events() -> CheckResult:
         return CheckResult(
             label="Remote Apple Events",
             status="UNKNOWN",
-            severity=Severity.LOW,
+            severity=Severity.INFO,
             tip="Run as root ('sudo macwatchdog') to check Remote Apple Events state.",
         )
     enabled = stdout.lower().endswith("on")

@@ -13,7 +13,7 @@ def check_remote_management() -> CheckResult:
         return CheckResult(
             label="Remote Login (SSH)",
             status="UNKNOWN",
-            severity=Severity.LOW,
+            severity=Severity.INFO,
             info=["`systemsetup` binary not found."],
         )
     output = (result.stdout or "").strip()
@@ -22,7 +22,7 @@ def check_remote_management() -> CheckResult:
         return CheckResult(
             label="Remote Login (SSH)",
             status="UNKNOWN",
-            severity=Severity.LOW,
+            severity=Severity.INFO,
             tip="Run as root ('sudo macwatchdog') to check SSH remote login state.",
         )
     enabled = output.lower().rstrip(".").endswith("on")
