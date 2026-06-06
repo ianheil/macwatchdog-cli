@@ -88,14 +88,14 @@ def check_tcc_permissions() -> CheckResult:
             label="TCC Privacy Permissions",
             status="SKIPPED",
             severity=Severity.INFO,
-            tip="Grant Full Disk Access to terminal in System Settings > Privacy & Security.",
+            tip="Grant Full Disk Access to macWatchdog in System Settings > Privacy & Security.",
         )
 
     if missing:
         return CheckResult(
             label="TCC Privacy Permissions",
             status="UNKNOWN",
-            severity=Severity.LOW,
+            severity=Severity.INFO,
             info=["Neither user nor system TCC.db is present on this machine."],
         )
 

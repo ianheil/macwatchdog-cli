@@ -36,7 +36,7 @@ def check_accessibility_apps() -> CheckResult:
             label="Accessibility/Full Disk Access",
             status="SKIPPED",
             severity=Severity.INFO,
-            tip="Grant Full Disk Access to terminal in System Settings > Privacy & Security.",
+            tip="Grant Full Disk Access to macWatchdog in System Settings > Privacy & Security.",
         )
     if not any_data:
         return CheckResult(
