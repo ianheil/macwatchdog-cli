@@ -44,6 +44,11 @@ def _is_worth_checking(path: Path) -> bool:
     if path.suffix.lower() not in _RISKY_EXTENSIONS:
         return False
     try:
+        # .app bundles are directories — stat().st_size on a directory returns
+        # only the inode size (~96 bytes), not bundle contents. Use is_dir()
+        # as the size proxy for bundles; use actual file size for flat files.
+        if path.is_dir():
+            return True  # any .app directory bundle is worth checking
         return path.stat().st_size >= _MIN_SIZE_BYTES
     except OSError:
         return False

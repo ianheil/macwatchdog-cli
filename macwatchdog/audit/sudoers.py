@@ -49,7 +49,10 @@ def check_sudoers() -> CheckResult:
     for path in targets:
         try:
             nopasswd.extend(_parse_nopasswd(path))
-        except PermissionError:
+        except (PermissionError, OSError):
+            # Either access denied or I/O error — treat as unreadable.
+            # Return immediately; remaining files in the loop are also likely
+            # unreadable so we'd just accumulate the same UNKNOWN verdict.
             return CheckResult(
                 label="Sudoers Configuration",
                 status="UNKNOWN",

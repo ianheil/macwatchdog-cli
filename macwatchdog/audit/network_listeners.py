@@ -44,9 +44,17 @@ def _is_exposed(port_field: str) -> bool:
     addr = port_field.rsplit(":", 1)[0] if ":" in port_field else port_field
     if addr in _EXPOSED_ADDRS:
         return True
+    # Bracket-enclosed IPv6 addresses from lsof e.g. [::] or [::ffff:0.0.0.0]
+    if addr.startswith("[") and addr.endswith("]"):
+        inner = addr[1:-1]
+        if inner == "::1":
+            return False   # IPv6 loopback
+        # Any all-zeros IPv6 (including IPv4-mapped) is exposed
+        if inner in {"::", "::ffff:0.0.0.0"} or inner.startswith("::ffff:0."):
+            return True
     if any(port_field.startswith(p) for p in _LOCALHOST_PREFIXES):
         return False
-    # IPv4 private/specific address → not exposed via all-interface binding
+    # Specific IPv4 address — not an all-interface binding
     return False
 
 

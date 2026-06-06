@@ -75,7 +75,13 @@ def restore_kexts(selected: list[Path]) -> tuple[list[str], list[str]]:
             meta = src.with_suffix(src.suffix + ".meta")
             if meta.exists():
                 data = json.loads(meta.read_text(encoding="utf-8"))
-                target = Path(data["original_path"])
+                candidate = Path(data["original_path"])
+                # Validate against path traversal: the meta sidecar lives in a
+                # user-writable directory. Constrain restore to /Library/Extensions/
+                # so a crafted .meta cannot redirect a root shutil.move() elsewhere.
+                if not str(candidate).startswith(str(_KEXT_DIR) + "/"):
+                    raise ValueError(f"meta original_path outside kext dir: {candidate}")
+                target = candidate
             else:
                 target = _KEXT_DIR / src.name
             shutil.move(str(src), str(target))
